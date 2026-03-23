@@ -1,5 +1,5 @@
 def main() -> None:
-    print("Salut tout le monde!")
+    pass
 
 
 if __name__ == "__main__":
