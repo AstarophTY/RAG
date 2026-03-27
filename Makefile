@@ -1,6 +1,7 @@
 TEMP_FILE := *.egg-info build dist .pytest_cache .mypy_cache
 MYPY_FLAG := --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 SRC_DIR := src
+TEST_DIR := tests
 UV := uv
 MAKEFLAGS += -s
 
@@ -21,9 +22,9 @@ debug:
 	$(UV) run python -m pdb -m src
 
 lint:
-	$(UV) run flake8 $(SRC_DIR)/*.py
-	$(UV) run mypy $(SRC_DIR)/*.py $(MYPY_FLAG)
+	$(UV) run flake8 $(SRC_DIR)/*.py $(TEST_DIR)/*.py
+	$(UV) run mypy $(SRC_DIR)/*.py $(TEST_DIR)/*.py $(MYPY_FLAG)
 
 lint-strict:
-	$(UV) run flake8 $(SRC_DIR)/*.py
-	$(UV) run mypy $(SRC_DIR)/*.py --strict
+	$(UV) run flake8 $(SRC_DIR)/*.py $(TEST_DIR)/*.py
+	$(UV) run mypy $(SRC_DIR)/*.py $(TEST_DIR)/*.py --strict

@@ -7,8 +7,10 @@ requires-python = ">=3.10"
 dependencies = [
     "bm25s>=0.3.3",
     "fire>=0.7.1",
+    "flake8>=7.3.0",
     "langchain>=1.2.12",
     "langchain-community>=0.4.1",
+    "mypy>=1.19.1",
     "pydantic>=2.12.5",
     "rank-bm25>=0.2.2",
     "rich>=14.3.3",
