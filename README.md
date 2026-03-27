@@ -1,4 +1,4 @@
-*This project has been created as part of the 42 curriculum by your_login, collaborator_login.*
+*This project has been created as part of the 42 curriculum by sgil--de.*
 
 # RAG Against the Machine
 
