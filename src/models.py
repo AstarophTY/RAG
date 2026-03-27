@@ -5,7 +5,7 @@ ensuring type safety and automatic validation at every boundary.
 """
 
 import uuid
-from typing import List, Union
+from typing import Union
 
 from pydantic import BaseModel, Field
 
@@ -42,11 +42,11 @@ class AnsweredQuestion(UnansweredQuestion):
     Inherits from UnansweredQuestion and adds sources and answer.
 
     Attributes:
-        sources: List of source locations that support the answer.
+        sources: list of source locations that support the answer.
         answer: The ground truth answer string.
     """
 
-    sources: List[MinimalSource]
+    sources: list[MinimalSource]
     answer: str
 
 
@@ -57,7 +57,7 @@ class RagDataset(BaseModel):
         rag_questions: Mixed list of answered and unanswered questions.
     """
 
-    rag_questions: List[Union[AnsweredQuestion, UnansweredQuestion]]
+    rag_questions: list[Union[AnsweredQuestion, UnansweredQuestion]]
 
 
 class MinimalSearchResults(BaseModel):
@@ -71,7 +71,7 @@ class MinimalSearchResults(BaseModel):
 
     question_id: str
     question: str
-    retrieved_sources: List[MinimalSource]
+    retrieved_sources: list[MinimalSource]
 
 
 class MinimalAnswer(MinimalSearchResults):
@@ -90,11 +90,11 @@ class StudentSearchResults(BaseModel):
     """Represents the full search output for a dataset.
 
     Attributes:
-        search_results: List of per-question retrieval results.
+        search_results: list of per-question retrieval results.
         k: Number of sources retrieved per question.
     """
 
-    search_results: List[MinimalSearchResults]
+    search_results: list[MinimalSearchResults]
     k: int
 
 
@@ -105,7 +105,7 @@ class StudentSearchResultsAndAnswer(StudentSearchResults):
     with MinimalAnswer objects that include generated answers.
 
     Attributes:
-        search_results: List of per-question results with answers.
+        search_results: list of per-question results with answers.
     """
 
-    search_results: List[MinimalAnswer]  # type: ignore[assignment]
+    search_results: list[MinimalAnswer]  # type: ignore[assignment]
