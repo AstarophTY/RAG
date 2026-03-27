@@ -144,19 +144,65 @@ graph TD
 
 ```txt
 rag-against-the-machine/
+│
 ├── src/
-│   ├── __main__.py
-│   ├── models.py
+│   ├── __main__.py               ← CLI entry point (Python Fire)
+│   ├── models.py                 ← All Pydantic data models
+│   │
 │   ├── ingestion/
+│   │   ├── __init__.py
+│   │   ├── walker.py             ← Walk repo, filter by extension
+│   │   ├── chunker_python.py     ← AST-based Python chunker
+│   │   ├── chunker_text.py       ← Sliding-window text/Markdown chunker
+│   │   └── chunk_store.py        ← Save / load chunks JSON to disk
+│   │
 │   ├── index/
+│   │   ├── __init__.py
+│   │   └── bm25_index.py         ← Build, save, load BM25 indexes
+│   │
 │   ├── retrieval/
+│   │   ├── __init__.py
+│   │   └── retriever.py          ← Query → top-k MinimalSource
+│   │
 │   ├── generation/
+│   │   ├── __init__.py
+│   │   └── generator.py          ← Context assembly + Qwen inference
+│   │
 │   └── evaluation/
-├── data/
+│       ├── __init__.py
+│       └── evaluator.py          ← recall@k metric
+│
+├── data/                         ← NOT committed (.gitignore)
+│   ├── raw/
+│   │   └── vllm-0.10.1/          ← vLLM source repository
+│   ├── processed/
+│   │   ├── chunks/
+│   │   │   ├── code_chunks.json
+│   │   │   └── docs_chunks.json
+│   │   └── bm25_index/
+│   │       ├── code/
+│   │       └── docs/
+│   ├── datasets/
+│   │   ├── AnsweredQuestions/
+│   │   │   ├── dataset_code_public.json
+│   │   │   └── dataset_docs_public.json
+│   │   └── UnansweredQuestions/
+│   │       ├── dataset_code_public.json
+│   │       └── dataset_docs_public.json
+│   └── output/
+│       ├── search_results/
+│       └── search_results_and_answer/
+│
 ├── tests/
-├── pyproject.toml
-├── uv.lock
+│   ├── test_chunker_python.py
+│   ├── test_chunker_text.py
+│   ├── test_retriever.py
+│   └── test_evaluator.py
+│
+├── pyproject.toml                ← uv project config + dependencies
+├── uv.lock                       ← Locked dependency tree
 ├── Makefile
+├── .gitignore
 └── README.md
 ```
 
