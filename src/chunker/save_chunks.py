@@ -27,7 +27,7 @@ class SaveChunk:
         self._save_chunks(code_chunks, "data/chunks/code_chunks.json")
         self._save_chunks(docs_chunks, "data/chunks/docs_chunks.json")
 
-    def load_all(self):
+    def load_all(self) -> tuple[list[Chunk], list[Chunk]]:
         return (
             self._load_chunks("data/chunks/code_chunks.json"),
             self._load_chunks("data/chunks/docs_chunks.json")
