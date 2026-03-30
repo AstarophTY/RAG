@@ -1,12 +1,5 @@
 CODE_EXTENSIONS: set[str] = {
     ".py",
-    ".cu",
-    ".cuh",
-    ".cpp",
-    ".hpp",
-    ".h",
-    ".cc",
-    ".c",
 }
 
 DOCS_EXTENSIONS: set[str] = {
@@ -14,8 +7,6 @@ DOCS_EXTENSIONS: set[str] = {
     ".rst",
     ".txt",
 }
-
-ALL_EXTENSIONS: set[str] = CODE_EXTENSIONS | DOCS_EXTENSIONS
 
 IGNORED_DIRS: set[str] = {
     "__pycache__",
@@ -34,8 +25,4 @@ IGNORED_DIRS: set[str] = {
     ".hypothesis",
 }
 
-IGNORED_FILENAMES: set[str] = {
-    "conftest.py",
-    "setup.py",
-    "setup.cfg",
-}
+ALL_EXTENSIONS: set[str] = CODE_EXTENSIONS | DOCS_EXTENSIONS
