@@ -1,40 +1,46 @@
 import json
 from pathlib import Path
-from dataclasses import asdict
 from src.chunker.chunk import Chunk
 
 
-class SaveChunk:
-    def __init__(self, base_path: str = "data/processed/chunks"):
-        self.base_path = Path(base_path)
-        self.base_path.mkdir(parents=True, exist_ok=True)
-        self.paths = {
-            "code": self.base_path / "code_chunks.json",
-            "docs": self.base_path / "docs_chunks.json"
-        }
+class SaveChunks:
+    @staticmethod
+    def _save_chunks(chunks: list[Chunk], output_file: str) -> None:
+        path = Path(output_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        data = [chunk.model_dump() for chunk in chunks]
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    @staticmethod
+    def _load_chunks(input_file: str) -> list[Chunk]:
+        path = Path(input_file)
+        if not path.exists():
+            return []
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        return [Chunk(**chunk) for chunk in data]
 
     def save_all(
         self,
         code_chunks: list[Chunk],
         docs_chunks: list[Chunk]
     ) -> None:
-        self._save(code_chunks, self.paths["code"])
-        self._save(docs_chunks, self.paths["docs"])
+        self._save_chunks(
+            code_chunks,
+            "data/processed/chunks/code_chunks.json"
+        )
+        self._save_chunks(
+            docs_chunks,
+            "data/processed/chunks/docs_chunks.json"
+        )
 
     def load_all(self) -> tuple[list[Chunk], list[Chunk]]:
         return (
-            self._load(self.paths["code"]),
-            self._load(self.paths["docs"])
+            self._load_chunks("data/processed/chunks/code_chunks.json"),
+            self._load_chunks("data/processed/chunks/docs_chunks.json")
         )
-
-    def _save(self, chunks: list[Chunk], path: Path) -> None:
-        with path.open("w", encoding="utf-8") as f:
-            json.dump(
-                [asdict(c) for c in chunks], f, ensure_ascii=False, indent=2
-            )
-
-    def _load(self, path: Path) -> list[Chunk]:
-        if not path.exists():
-            return []
-        with path.open("r", encoding="utf-8") as f:
-            return [Chunk(**data) for data in json.load(f)]

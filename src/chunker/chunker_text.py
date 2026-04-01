@@ -1,6 +1,6 @@
 class TextChunker:
     @staticmethod
-    def extract_chunk(
+    def extract_chunks(
         text: str,
         chunk_size: int = 512,
         overlap: int = 100

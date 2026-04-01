@@ -3,6 +3,7 @@ from pathlib import Path
 from .constants import (
     IGNORED_DIRS,
     ALL_EXTENSIONS,
+    IGNORED_FILES
 )
 
 
@@ -31,6 +32,9 @@ class Walker:
             for filename in filenames:
                 path = Path(dirpath) / filename
                 suffix = path.suffix.lower()
+
+                if filename in IGNORED_FILES:
+                    continue
 
                 if suffix not in ALL_EXTENSIONS:
                     continue

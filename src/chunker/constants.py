@@ -25,4 +25,8 @@ IGNORED_DIRS: set[str] = {
     ".hypothesis",
 }
 
+IGNORED_FILES: set[str] = {
+    "setup.py"
+}
+
 ALL_EXTENSIONS: set[str] = CODE_EXTENSIONS | DOCS_EXTENSIONS
