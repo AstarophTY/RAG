@@ -2,7 +2,7 @@
 
 # RAG Against the Machine
 
-> A Python RAG (Retrieval-Augmented Generation) system that indexes the vLLM codebase and answers questions about it using BM25 retrieval + Qwen/Qwen3-0.6B generation.
+> A Python RAG (Retrieval-Augmented Generation) system that indexes the vLLM codebase and answers questions about it using BM25 retrieval + Ollama (Qwen) generation.
 
 ---
 
@@ -75,7 +75,7 @@ graph TD
 
     Generation["Generation"]
     Context["Context"]
-    Model["Qwen"]
+    Model["Ollama (Qwen)"]
     Answer["Answer"]
 
     Eval["Evaluation"]
@@ -121,7 +121,7 @@ graph TD
 
     Generator["Generator"]
     Context["Context window"]
-    LLM["Qwen3-0.6B"]
+    LLM["Ollama: qwen2.5:1.5b"]
 
     Output["Final Answer"]
 
@@ -166,7 +166,7 @@ rag-against-the-machine/
 │   │
 │   ├── generation/
 │   │   ├── __init__.py
-│   │   └── generator.py          ← Context assembly + Qwen inference
+│   │   └── generator.py          ← Context assembly + Ollama inference
 │   │
 │   └── evaluation/
 │       ├── __init__.py
@@ -320,6 +320,13 @@ graph TD
 make install
 ```
 
+### Ollama setup (required for generation)
+
+```bash
+ollama serve
+ollama pull qwen2.5:1.5b
+```
+
 ### Index
 
 ```bash
@@ -399,6 +406,7 @@ graph TD
 ## Resources
 
 * [https://en.wikipedia.org/wiki/Okapi_BM25](https://en.wikipedia.org/wiki/Okapi_BM25)
-* [https://huggingface.co/Qwen/Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B)
+* [https://ollama.com/library/qwen2.5](https://ollama.com/library/qwen2.5)
+* [https://github.com/ollama/ollama-python](https://github.com/ollama/ollama-python)
 * [https://docs.python.org/3/library/ast.html](https://docs.python.org/3/library/ast.html)
 * [https://en.wikipedia.org/wiki/Retrieval-augmented_generation](https://en.wikipedia.org/wiki/Retrieval-augmented_generation)
