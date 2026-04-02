@@ -15,14 +15,28 @@ from src.retrieval.retriever import Retriever
 
 
 class DatasetService:
+    """Service for dataset search and dataset answer generation."""
+
     def __init__(self) -> None:
+        """Initialize retriever and lazy generator."""
         self.retriever = Retriever()
         self.generator: Generator | None = None
 
     @staticmethod
     def _load_dataset(path: Path) -> RagDataset:
+        """Load and validate a dataset JSON file."""
         data = load_json(path)
         return RagDataset.model_validate(data)
+
+    @staticmethod
+    def _infer_mode_from_dataset_path(dataset_path: str) -> str:
+        """Infer retrieval mode from dataset filename."""
+        name = Path(dataset_path).name.lower()
+        if "dataset_code" in name or "_code" in name:
+            return "code"
+        if "dataset_docs" in name or "_docs" in name:
+            return "docs"
+        return "all"
 
     def search_dataset(
         self,
@@ -30,6 +44,7 @@ class DatasetService:
         k: int,
         save_dir: str,
     ) -> Path:
+        """Run retrieval for each dataset question and save output."""
         if k <= 0:
             raise ValueError("k must be greater than 0.")
 
@@ -38,10 +53,11 @@ class DatasetService:
             raise FileNotFoundError(f"Dataset file does not exist: {path}")
 
         dataset = self._load_dataset(path)
+        mode = self._infer_mode_from_dataset_path(dataset_path)
         rows: list[MinimalSearchResults] = []
 
         for item in tqdm(dataset.rag_questions, desc="Searching dataset"):
-            sources = self.retriever.retrieve(item.question, k=k)
+            sources = self.retriever.retrieve(item.question, k=k, mode=mode)
             rows.append(
                 MinimalSearchResults(
                     question_id=item.question_id,
@@ -60,6 +76,7 @@ class DatasetService:
         return output_path
 
     def answer_dataset(self, search_results_path: str, save_dir: str) -> Path:
+        """Generate answers from saved search results and save output."""
         path = Path(search_results_path)
         if not path.exists():
             raise FileNotFoundError(

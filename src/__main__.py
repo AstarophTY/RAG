@@ -32,8 +32,8 @@ class Pipeline:
             f"{stats['duration']} seconds."
         )
 
-    def search(self, query: str, k: int = 5) -> None:
-        results = self.query_service.search(query=query, k=k)
+    def search(self, query: str, k: int = 5, mode: str = "all") -> None:
+        results = self.query_service.search(query=query, k=k, mode=mode)
 
         if not results:
             print("No matching sources found.")
@@ -59,8 +59,12 @@ class Pipeline:
         )
         print(f"Saved search results to: {output_path}")
 
-    def answer(self, query: str, k: int = 5) -> None:
-        answer, sources = self.query_service.answer(query=query, k=k)
+    def answer(self, query: str, k: int = 5, mode: str = "all") -> None:
+        answer, sources = self.query_service.answer(
+            query=query,
+            k=k,
+            mode=mode,
+        )
 
         print("Answer:")
         print(answer)

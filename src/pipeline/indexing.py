@@ -13,6 +13,7 @@ from src.index.bm25_index import Index
 
 class IndexingService:
     def __init__(self) -> None:
+        """Initialize chunkers, storage, and index writer."""
         self.walker = Walker()
         self.py_chunker = PythonChunker()
         self.text_chunker = TextChunker()
@@ -26,6 +27,7 @@ class IndexingService:
         max_size: int,
         overlap: int,
     ) -> list[tuple[str, int, int]]:
+        """Split one large chunk into overlapping subchunks."""
         if len(content) <= max_size:
             end = start + len(content)
             return [(content, start, end)]
@@ -53,6 +55,7 @@ class IndexingService:
         max_size: int,
         overlap: int,
     ) -> list[tuple[str, int, int]]:
+        """Apply large-chunk splitting to all raw chunks."""
         parts: list[tuple[str, int, int]] = []
         for content, start, _end in raw_chunks:
             parts.extend(
@@ -70,6 +73,7 @@ class IndexingService:
         file_path: Path,
         raw_chunks: list[tuple[str, int, int]],
     ) -> list[Chunk]:
+        """Convert raw tuples to typed code chunk models."""
         return [
             Chunk(
                 file_path=str(file_path),
@@ -86,6 +90,7 @@ class IndexingService:
         file_path: Path,
         raw_chunks: list[tuple[str, int, int]],
     ) -> list[Chunk]:
+        """Convert raw tuples to typed docs chunk models."""
         return [
             Chunk(
                 file_path=str(file_path),
@@ -98,6 +103,7 @@ class IndexingService:
         ]
 
     def run(self, repo_path: str, max_chunk_size: int) -> dict[str, int]:
+        """Run indexing pipeline and return summary statistics."""
         repo = Path(repo_path)
         if not repo.exists():
             raise FileNotFoundError(f"Repository path does not exist: {repo}")
@@ -121,6 +127,21 @@ class IndexingService:
             try:
                 if file_path.suffix.lower() == ".py":
                     raw = self.py_chunker.extract_chunks(file_path)
+                    if not raw:
+                        try:
+                            source_text = file_path.read_text(encoding="utf-8")
+                        except UnicodeDecodeError:
+                            source_text = file_path.read_text(
+                                encoding="utf-8",
+                                errors="replace",
+                            )
+
+                        raw = self.text_chunker.extract_chunks(
+                            source_text,
+                            chunk_size=max_chunk_size,
+                            overlap=min(120, max_chunk_size // 5),
+                        )
+
                     raw = self._split_raw_chunks(
                         raw_chunks=raw,
                         max_size=max_chunk_size,

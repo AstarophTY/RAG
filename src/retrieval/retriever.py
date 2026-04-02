@@ -3,17 +3,23 @@ import json
 import bm25s
 from pathlib import Path
 from ..models import MinimalSource
+from typing import Any
 
 
 class Retriever:
+    """Retrieve ranked source spans from persisted BM25 artifacts."""
+
     def __init__(self, index_base_path: str = "data/processed/bm25_index"):
+        """Initialize retriever paths and lazy-loaded index placeholders."""
         self.base_path = Path(index_base_path)
+
         self.index_code: bm25s.BM25 | None = None
         self.index_docs: bm25s.BM25 | None = None
-        self.meta_code: list[dict] = []
-        self.meta_docs: list[dict] = []
+        self.meta_code: list[dict[str, Any]] = []
+        self.meta_docs: list[dict[str, Any]] = []
 
     def _ensure_loaded(self) -> None:
+        """Load BM25 indexes and metadata from disk if not already loaded."""
         if self.index_code is not None and self.index_docs is not None:
             return
 
@@ -40,11 +46,77 @@ class Retriever:
             self.meta_docs = json.load(f)
 
     def _tokenize(self, text: str) -> list[str]:
+        """Convert text to lowercase alphanumeric BM25 tokens."""
         return re.sub(r"[^a-z0-9]", " ", text.lower()).split()
 
-    def retrieve(self, query: str, k: int = 5) -> list[MinimalSource]:
+    def _bm25_ranked(
+        self,
+        tokens: list[str],
+        candidate_k: int,
+        selected_mode: str,
+    ) -> list[dict[str, Any]]:
+        """Return ranked metadata docs from BM25 for selected corpus mode."""
+        if self.index_code is None or self.index_docs is None:
+            return []
+
+        queries = [tokens]
+        docs_code: list[list[dict[str, Any]]] = [[]]
+        scores_code: list[list[float]] = [[]]
+        docs_docs: list[list[dict[str, Any]]] = [[]]
+        scores_docs: list[list[float]] = [[]]
+
+        if selected_mode in {"all", "code"}:
+            docs_code, scores_code = self.index_code.retrieve(
+                queries,
+                corpus=self.meta_code,
+                k=candidate_k,
+            )
+
+        if selected_mode in {"all", "docs"}:
+            docs_docs, scores_docs = self.index_docs.retrieve(
+                queries,
+                corpus=self.meta_docs,
+                k=candidate_k,
+            )
+
+        ranked = [
+            (float(score), doc)
+            for doc, score in zip(docs_code[0], scores_code[0])
+        ]
+        ranked.extend(
+            (float(score), doc)
+            for doc, score in zip(docs_docs[0], scores_docs[0])
+        )
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return [doc for _score, doc in ranked]
+
+    @staticmethod
+    def _normalize_mode(mode: str) -> str:
+        """Validate retrieval mode and normalize it to lowercase."""
+        normalized = mode.strip().lower()
+        if normalized not in {"all", "code", "docs"}:
+            raise ValueError("mode must be one of: all, code, docs.")
+        return normalized
+
+    def retrieve(
+        self,
+        query: str,
+        k: int = 5,
+        mode: str = "all",
+    ) -> list[MinimalSource]:
+        """Retrieve top-k unique source spans for a query.
+
+        Args:
+            query: Natural language query text.
+            k: Number of sources to return.
+            mode: Corpus mode among `all`, `code`, or `docs`.
+
+        Returns:
+            Ranked list of minimal source spans.
+        """
         if k <= 0:
             raise ValueError("k must be greater than 0.")
+        selected_mode = self._normalize_mode(mode)
 
         self._ensure_loaded()
 
@@ -54,52 +126,34 @@ class Retriever:
         tokens = self._tokenize(query)
         if not tokens:
             return []
-        queries = [tokens]
-
-        docs_code, scores_code = self.index_code.retrieve(
-            queries,
-            corpus=self.meta_code,
-            k=k
-        )
-        docs_docs, scores_docs = self.index_docs.retrieve(
-            queries,
-            corpus=self.meta_docs,
-            k=k
+        candidate_k = max(k * 6, 30)
+        ranked = self._bm25_ranked(
+            tokens=tokens,
+            candidate_k=candidate_k,
+            selected_mode=selected_mode,
         )
 
-        results_code = zip(docs_code[0], scores_code[0])
-        results_docs = zip(docs_docs[0], scores_docs[0])
+        sources: list[MinimalSource] = []
+        seen_spans: set[tuple[str, int, int]] = set()
 
-        all_results = []
-        for doc, score in results_code:
-            all_results.append({"score": float(score), "meta": doc})
-
-        for doc, score in results_docs:
-            all_results.append({"score": float(score), "meta": doc})
-
-        all_results.sort(key=lambda x: x["score"], reverse=True)
-
-        final_sources = []
-        seen_files = set()
-
-        for item in all_results:
-            doc = item["meta"]
-            file_path = doc["file_path"]
-
-            if file_path in seen_files:
+        for doc in ranked:
+            span = (
+                str(doc["file_path"]),
+                int(doc["first_character_index"]),
+                int(doc["last_character_index"]),
+            )
+            if span in seen_spans:
                 continue
 
-            seen_files.add(file_path)
-
-            final_sources.append(
+            seen_spans.add(span)
+            sources.append(
                 MinimalSource(
-                    file_path=file_path,
+                    file_path=doc["file_path"],
                     first_character_index=doc["first_character_index"],
-                    last_character_index=doc["last_character_index"]
+                    last_character_index=doc["last_character_index"],
                 )
             )
-
-            if len(final_sources) == k:
+            if len(sources) >= k:
                 break
 
-        return final_sources
+        return sources
