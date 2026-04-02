@@ -5,15 +5,18 @@ from sys import stderr
 
 class PythonChunker:
     def __init__(self) -> None:
+        """Initialize the Python chunker instance."""
         pass
 
     def _get_line_offsets(self, text: str) -> list[int]:
+        """Compute cumulative character offsets for each source line."""
         offsets = [0]
         for line in text.splitlines(keepends=True):
             offsets.append(offsets[-1] + len(line))
         return offsets
 
     def extract_chunks(self, file_path: Path) -> list[tuple[str, int, int]]:
+        """Extract function/class code spans from a Python source file."""
         try:
             source_code: str = file_path.read_text()
         except (OSError, UnicodeDecodeError) as e:

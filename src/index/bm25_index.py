@@ -8,6 +8,7 @@ from src.chunker.chunk import Chunk
 class Index:
     @staticmethod
     def _tokenize(text: str) -> list[str]:
+        """Tokenize text into lowercase alphanumeric terms for BM25."""
         return re.sub(r"[^a-z0-9]", " ", text.lower()).split()
 
     def index(
@@ -15,6 +16,7 @@ class Index:
         chunks_code: list[Chunk],
         chunks_docs: list[Chunk]
     ) -> tuple[bm25s.BM25, bm25s.BM25]:
+        """Build, persist, and return BM25 indexes for code and docs."""
         corpus_tokens_code = [
             self._tokenize(chunk.content) for chunk in chunks_code
         ]
@@ -43,6 +45,7 @@ class Index:
 
     @staticmethod
     def _save_metadata(chunks: list[Chunk], output_file: Path) -> None:
+        """Write minimal chunk span metadata used during retrieval."""
         metadata = [
             {
                 "file_path": str(c.file_path),

@@ -6,6 +6,7 @@ from src.chunker.chunk import Chunk
 class SaveChunks:
     @staticmethod
     def _save_chunks(chunks: list[Chunk], output_file: str) -> None:
+        """Serialize chunk models and write them to a JSON file."""
         path = Path(output_file)
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -16,6 +17,7 @@ class SaveChunks:
 
     @staticmethod
     def _load_chunks(input_file: str) -> list[Chunk]:
+        """Load chunk models from a JSON file if it exists."""
         path = Path(input_file)
         if not path.exists():
             return []
@@ -30,6 +32,7 @@ class SaveChunks:
         code_chunks: list[Chunk],
         docs_chunks: list[Chunk]
     ) -> None:
+        """Persist both code and documentation chunks to default locations."""
         self._save_chunks(
             code_chunks,
             "data/processed/chunks/code_chunks.json"
@@ -40,6 +43,7 @@ class SaveChunks:
         )
 
     def load_all(self) -> tuple[list[Chunk], list[Chunk]]:
+        """Load code and documentation chunks from default locations."""
         return (
             self._load_chunks("data/processed/chunks/code_chunks.json"),
             self._load_chunks("data/processed/chunks/docs_chunks.json")

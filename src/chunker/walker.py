@@ -10,6 +10,7 @@ from .constants import (
 class Walker:
     @staticmethod
     def _is_binary(path: Path) -> bool:
+        """Detect whether a file appears to contain binary content."""
         try:
             with open(path, "rb") as f:
                 return b"\x00" in f.read(1024)
@@ -18,6 +19,7 @@ class Walker:
 
     @staticmethod
     def walk_dir(path_str: str) -> list[Path]:
+        """Return supported, non-empty, non-binary files under a directory."""
         result: list[Path] = []
         root = Path(path_str)
 

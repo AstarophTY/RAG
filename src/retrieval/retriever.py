@@ -49,8 +49,59 @@ class Retriever:
         """Convert text to lowercase alphanumeric BM25 tokens."""
         return re.sub(r"[^a-z0-9]", " ", text.lower()).split()
 
+    @staticmethod
+    def _query_hints(query: str) -> set[str]:
+        """Extract query hints useful for file-path level reranking."""
+        stop = {
+            "what",
+            "which",
+            "when",
+            "where",
+            "how",
+            "does",
+            "about",
+            "configuration",
+            "constructor",
+            "value",
+            "default",
+            "parameter",
+            "method",
+            "function",
+            "class",
+            "assert",
+        }
+
+        hints: set[str] = set()
+        hints.update(re.findall(r"[a-z0-9_]{4,}", query.lower()))
+
+        camel_parts = re.findall(
+            r"[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|[A-Z]?[a-z]+[0-9]*",
+            query,
+        )
+        hints.update(part.lower() for part in camel_parts if len(part) >= 4)
+
+        return {hint for hint in hints if hint not in stop}
+
+    @staticmethod
+    def _path_bonus(doc: dict[str, Any], hints: set[str]) -> float:
+        """Compute a small reranking bonus from query hints and file path."""
+        path_lc = str(doc.get("file_path", "")).lower()
+        if not path_lc:
+            return 0.0
+
+        bonus = 0.0
+        for hint in hints:
+            if hint in path_lc:
+                bonus += 1.5
+
+        if "/models/" in path_lc and bonus > 0:
+            bonus += 0.5
+
+        return bonus
+
     def _bm25_ranked(
         self,
+        query: str,
         tokens: list[str],
         candidate_k: int,
         selected_mode: str,
@@ -79,12 +130,13 @@ class Retriever:
                 k=candidate_k,
             )
 
+        hints = self._query_hints(query)
         ranked = [
-            (float(score), doc)
+            (float(score) + self._path_bonus(doc, hints), doc)
             for doc, score in zip(docs_code[0], scores_code[0])
         ]
         ranked.extend(
-            (float(score), doc)
+            (float(score) + self._path_bonus(doc, hints), doc)
             for doc, score in zip(docs_docs[0], scores_docs[0])
         )
         ranked.sort(key=lambda item: item[0], reverse=True)
@@ -126,8 +178,9 @@ class Retriever:
         tokens = self._tokenize(query)
         if not tokens:
             return []
-        candidate_k = max(k * 6, 30)
+        candidate_k = max(k * 12, 80)
         ranked = self._bm25_ranked(
+            query=query,
             tokens=tokens,
             candidate_k=candidate_k,
             selected_mode=selected_mode,

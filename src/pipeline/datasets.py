@@ -22,6 +22,41 @@ class DatasetService:
         self.retriever = Retriever()
         self.generator: Generator | None = None
 
+    def _ensure_generator(
+        self,
+        model_name: str | None,
+        max_new_tokens: int,
+        ollama_host: str | None,
+    ) -> Generator:
+        """Create or update generator with the requested model settings."""
+        if max_new_tokens <= 0:
+            raise ValueError("max_new_tokens must be greater than 0.")
+
+        if self.generator is None:
+            self.generator = Generator(
+                model_name=model_name,
+                max_new_tokens=max_new_tokens,
+                ollama_host=ollama_host,
+            )
+            return self.generator
+
+        if model_name is not None:
+            self.generator.set_model(
+                model_name=model_name,
+                max_new_tokens=max_new_tokens,
+            )
+        else:
+            self.generator.max_new_tokens = max_new_tokens
+
+        if (
+            ollama_host is not None
+            and self.generator.ollama_host != ollama_host
+        ):
+            self.generator.ollama_host = ollama_host
+            self.generator._client = None
+
+        return self.generator
+
     @staticmethod
     def _load_dataset(path: Path) -> RagDataset:
         """Load and validate a dataset JSON file."""
@@ -75,7 +110,14 @@ class DatasetService:
         save_json(output_path, output.model_dump())
         return output_path
 
-    def answer_dataset(self, search_results_path: str, save_dir: str) -> Path:
+    def answer_dataset(
+        self,
+        search_results_path: str,
+        save_dir: str,
+        model_name: str | None = None,
+        max_new_tokens: int = 120,
+        ollama_host: str | None = None,
+    ) -> Path:
         """Generate answers from saved search results and save output."""
         path = Path(search_results_path)
         if not path.exists():
@@ -86,12 +128,15 @@ class DatasetService:
         data = load_json(path)
         parsed = StudentSearchResults.model_validate(data)
 
-        if self.generator is None:
-            self.generator = Generator()
+        generator = self._ensure_generator(
+            model_name=model_name,
+            max_new_tokens=max_new_tokens,
+            ollama_host=ollama_host,
+        )
 
         rows: list[MinimalAnswer] = []
         for item in tqdm(parsed.search_results, desc="Answering dataset"):
-            text = self.generator.answer(item.question, item.retrieved_sources)
+            text = generator.answer(item.question, item.retrieved_sources)
             rows.append(
                 MinimalAnswer(
                     question_id=item.question_id,

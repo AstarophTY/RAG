@@ -8,6 +8,7 @@ from src.models import MinimalSearchResults, RagDataset, StudentSearchResults
 class Evaluator:
     @staticmethod
     def _load_json(path: Path) -> dict[str, Any]:
+        """Load a JSON object from disk and validate object root type."""
         with open(path, "r", encoding="utf-8") as file:
             payload = json.load(file)
         if not isinstance(payload, dict):
@@ -21,6 +22,7 @@ class Evaluator:
         second_start: int,
         second_end: int,
     ) -> float:
+        """Compute overlap ratio of two spans using first span as reference."""
         intersection = max(
             0,
             min(first_end, second_end) - max(first_start, second_start),
@@ -34,6 +36,7 @@ class Evaluator:
         predicted_sources: list[dict[str, Any]],
         threshold: float,
     ) -> bool:
+        """Check whether one ground-truth source is matched in predictions."""
         gt_file = str(gt_source["file_path"])
         gt_start = int(gt_source["first_character_index"])
         gt_end = int(gt_source["last_character_index"])

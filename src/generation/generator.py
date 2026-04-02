@@ -10,18 +10,36 @@ from src.models import MinimalSource
 class Generator:
     def __init__(
         self,
-        model_name: str = "qwen3:0.6b",
-        max_new_tokens: int = 120,
+        model_name: str | None = None,
+        max_new_tokens: int = 180,
         ollama_host: str | None = None,
     ) -> None:
-        self.model_name = model_name
+        """Initialize generator configuration and preload chunk lookup."""
+        self.model_name = model_name or "qwen3:0.6b"
         self.max_new_tokens = max_new_tokens
         self.ollama_host = ollama_host
         self._client: Any | None = None
         self._chunk_lookup = self._build_chunk_lookup()
 
+    def set_model(
+        self,
+        model_name: str,
+        max_new_tokens: int | None = None,
+    ) -> None:
+        """Switch the generation model and optionally token budget."""
+        new_name = model_name.strip()
+        if not new_name:
+            raise ValueError("model_name cannot be empty.")
+
+        self.model_name = new_name
+        if max_new_tokens is not None:
+            if max_new_tokens <= 0:
+                raise ValueError("max_new_tokens must be greater than 0.")
+            self.max_new_tokens = max_new_tokens
+
     @staticmethod
     def _build_chunk_lookup() -> dict[tuple[str, int, int], str]:
+        """Build a dictionary mapping source spans to their chunk content."""
         storage = SaveChunks()
         code_chunks, docs_chunks = storage.load_all()
         lookup: dict[tuple[str, int, int], str] = {}
@@ -36,6 +54,7 @@ class Generator:
         return lookup
 
     def _load_model(self) -> None:
+        """Lazily create and validate the Ollama client instance."""
         if self._client is not None:
             return
         import importlib
@@ -46,6 +65,10 @@ class Generator:
         self._client.list()
 
     def _read_source_text(self, source: MinimalSource) -> str:
+        """Read source text for a span.
+
+        Prefer cached chunk content when available.
+        """
         key = (
             source.file_path,
             source.first_character_index,
@@ -61,105 +84,95 @@ class Generator:
 
     @staticmethod
     def _query_keywords(query: str) -> set[str]:
+        """Extract non-trivial query keywords.
+
+        Common stop words are removed.
+        """
         stop = {
             "what", "which", "when", "where", "how", "with", "from",
             "that", "this", "does", "must", "have", "true", "false",
-            "the", "are", "for", "vllm",
+            "the", "are", "for", "vllm", "is", "in", "to", "a", "an",
+            "and", "or", "of", "by", "set", "get", "value", "values",
         }
         words = re.findall(r"[a-zA-Z0-9_]{3,}", query.lower())
         return {w for w in words if w not in stop}
 
     def _extract_relevant_lines(self, query: str, content: str) -> str:
+        """Select and rank the most relevant lines from source content."""
         keywords = self._query_keywords(query)
+        lines = content.splitlines()
         scored: list[tuple[int, str]] = []
 
-        for raw_line in content.splitlines():
+        for raw_line in lines:
             line = raw_line.strip()
 
-            if len(line) < 10:
+            if len(line) < 5:
                 continue
-            if line.startswith(("#", '"""', "'''", "import ", "from ")):
+            if line.startswith(('"""', "'''", "import ", "from ", "#")):
                 continue
 
             line_lc = line.lower()
-            score = sum(1 for kw in keywords if kw in line_lc)
+            score = 0
 
-            if "=" in line and " and " in line_lc:
-                score += 2
+            for kw in keywords:
+                if kw in line_lc:
+                    score += 2
+
+            if "=" in line and "==" not in line:
+                score += 1
+
+            if "(" in line and ")" in line:
+                score += 1
+
+            if any(
+                line_lc.startswith(
+                    prefix) for prefix in ("if ", "elif ", "for ", "while ")
+            ):
+                if any(kw in line_lc for kw in keywords):
+                    score += 1
 
             if score > 0:
                 scored.append((score, line))
 
         if not scored:
-            return content[:600].strip()
+            return content[:800].strip()
 
         scored.sort(key=lambda x: x[0], reverse=True)
-        return "\n".join(line for _, line in scored[:6])
-
-    def _fallback_from_context(self, query: str, context: str) -> str:
-        keywords = self._query_keywords(query)
-        lines = [
-            line.strip()
-            for line in context.splitlines()
-            if line.strip() and not line.strip().startswith("[Source")
-        ]
-        if not lines:
-            return ""
-
-        query_lc = query.lower()
-        if "supported" in query_lc:
-            quoted = re.findall(r"\"([^\"]+)\"|'([^']+)'", context)
-            values = [a or b for a, b in quoted if (a or b)]
-            values.extend(re.findall(r"`([^`]+)`", context))
-            values = [v.strip() for v in values if 1 <= len(v.strip()) <= 32]
-            unique_values: list[str] = []
-            for val in values:
-                if val not in unique_values:
-                    unique_values.append(val)
-            if len(unique_values) >= 2:
-                joined = " and ".join(
-                    [f'"{v}"' for v in unique_values[:2]]
-                )
-                return self._enforce_answer_style(
-                    f"supported values are {joined}."
-                )
-
-        def score_line(line: str) -> int:
-            line_lc = line.lower()
-            score = sum(1 for kw in keywords if kw in line_lc)
-            if " or " in line_lc or " and " in line_lc:
-                score += 1
-            if "true" in line_lc or "false" in line_lc:
-                score += 1
-            if "expected" in line_lc:
-                score += 2
-            if re.search(r"\[[^\]]+\]\[[^\]]+\]", line):
-                score -= 2
-            return score
-
-        best = max(lines, key=score_line)
-        best = re.sub(r"\s+", " ", best).strip()
-        if len(best) > 240:
-            best = best[:240].rstrip() + "..."
-        if best and best[-1] not in {".", "!", "?"}:
-            best += "."
-        return self._enforce_answer_style(best)
+        return "\n".join(line for _, line in scored[:10])
 
     @staticmethod
     def _is_usable_answer(text: str) -> bool:
-        if len(text) < 12 or len(text.split()) < 2:
+        """Check whether generated text is suitable as a final answer."""
+        if len(text) < 12 or len(text.split()) < 4:
             return False
 
         lower = text.lower()
+
         banned_starts = (
             "i don't know",
+            "i do not know",
             "not enough information",
             "cannot determine",
+            "unable to determine",
+            "the context does not",
+            "there is no information",
         )
         if any(lower.startswith(prefix) for prefix in banned_starts):
             return False
 
-        # Évite les sorties markdown du type [text](link) ou [text][ref].
+        banned_code_like_starts = (
+            "the if ",
+            "the for ",
+            "the while ",
+            "the return ",
+            "the elif ",
+            "the else",
+            "the def ",
+            "the class ",
+        )
+        if any(lower.startswith(prefix) for prefix in banned_code_like_starts):
+            return False
+
         if re.search(r"\[[^\]]+\]\([^)]+\)", text):
             return False
         if re.search(r"\[[^\]]+\]\[[^\]]+\]", text):
@@ -171,12 +184,13 @@ class Generator:
         self,
         query: str,
         sources: list[MinimalSource],
-        max_chars: int = 1200,
+        max_chars: int = 2000,
     ) -> str:
+        """Assemble a bounded textual context from top retrieved sources."""
         pieces: list[str] = []
         total = 0
 
-        for rank, source in enumerate(sources[:3], start=1):
+        for rank, source in enumerate(sources[:4], start=1):
             raw = self._read_source_text(source)
             relevant = self._extract_relevant_lines(query, raw)
             if not relevant:
@@ -201,6 +215,7 @@ class Generator:
 
     @staticmethod
     def _clean_response(text: str) -> str:
+        """Normalize and truncate raw model output into one clean response."""
         cleaned = text.strip()
 
         cleaned = re.sub(
@@ -215,8 +230,17 @@ class Generator:
         cleaned = re.sub(r"^answer\s*:\s*", "", cleaned.strip(), flags=re.I)
 
         cleaned = re.sub(r"\n{2,}", " ", cleaned)
-
         cleaned = re.sub(r" {2,}", " ", cleaned).strip()
+
+        if (
+            len(cleaned) >= 2
+            and cleaned[0] == cleaned[-1]
+            and cleaned[0] in {'"', "'"}
+        ):
+            cleaned = cleaned[1:-1].strip()
+
+        cleaned = re.sub(r"\s+([.!?])", r"\1", cleaned)
+        cleaned = re.sub(r"([.!?])\s*([.!?])+", r"\1", cleaned)
 
         if len(cleaned) > 600:
             truncated = cleaned[:600]
@@ -233,26 +257,47 @@ class Generator:
 
     @staticmethod
     def _enforce_answer_style(text: str) -> str:
+        """Normalize answer formatting while keeping concise detail."""
         cleaned = text.strip()
         if not cleaned:
             return cleaned
 
+        cleaned = re.sub(
+            r"^(here(?:'s| is)\s+the\s+answer\s*[:\-]?|"
+            r"the\s+answer\s+is\s*[:\-]?|"
+            r"it\s+is\s+that\s+|"
+            r"in\s+this\s+context,\s*)",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        ).strip()
+
         cleaned = re.sub(r"\s+", " ", cleaned)
 
-        # Garder une seule phrase (la première complète)
-        sentence_end = re.search(r"[.!?]", cleaned)
-        if sentence_end:
-            cleaned = cleaned[:sentence_end.end()].strip()
+        sentence_matches = list(re.finditer(r"[^.!?]+[.!?]", cleaned))
+        if sentence_matches:
+            if len(sentence_matches) >= 2:
+                cleaned = cleaned[:sentence_matches[1].end()].strip()
+            else:
+                cleaned = sentence_matches[0].group(0).strip()
 
-        # Début simple et homogène avec le style du dataset
-        if not cleaned.lower().startswith("the "):
-            cleaned = f"The {cleaned[0].lower()}{cleaned[1:]}" \
-                if len(cleaned) > 1 else f"The {cleaned.lower()}"
+        if cleaned and cleaned[-1] not in {".", "!", "?"}:
+            cleaned += "."
+
+        if cleaned and cleaned[0].islower():
+            cleaned = cleaned[0].upper() + cleaned[1:]
+
+        if cleaned and not re.match(
+            r"^(The|When|If|All|Both|This|These)\b",
+            cleaned,
+        ):
+            cleaned = f"The answer is that {cleaned[0].lower() + cleaned[1:]}"
 
         return cleaned
 
     @staticmethod
     def _extract_response_text(response: Any) -> str:
+        """Extract text from multiple possible model response shapes."""
         if hasattr(response, "model_dump"):
             try:
                 response = response.model_dump()
@@ -277,29 +322,65 @@ class Generator:
 
         return ""
 
+    def _generate(self, prompt: str, options: dict[str, Any]) -> Any:
+        """Call the model with reasoning disabled when supported."""
+        if self._client is None:
+            raise RuntimeError("Model initialization failed.")
+
+        try:
+            return self._client.generate(
+                model=self.model_name,
+                prompt=prompt,
+                stream=False,
+                think=False,
+                options=options,
+            )
+        except TypeError:
+            return self._client.generate(
+                model=self.model_name,
+                prompt=prompt,
+                stream=False,
+                options=options,
+            )
+
     @staticmethod
     def _build_prompt(query: str, context: str) -> str:
+        """Build the generation prompt from query and context."""
         return (
             "You are a precise assistant answering questions about the "
             "vLLM source code.\n"
             "\n"
             "Rules:\n"
-            "- Answer in ONE complete English sentence.\n"
-            "- Start with a simple direct lead-in (preferably 'The ...').\n"
+            "- Answer in 1 to 2 complete English sentences.\n"
+            "- Match the exact style of the reference dataset answers: short, "
+            "direct, factual, and neutral.\n"
+            "- Be specific and factual: include exact values, variable names, "
+            "and conditions from the code.\n"
+            "- Prefer patterns like: 'The default value ... is ...', "
+            "'When ... , ...', or 'The method ... returns ...'.\n"
+            "- Use natural language to describe code logic clearly.\n"
             "- Use only information from the context below.\n"
-            "- Keep important code identifiers when needed "
-            "(e.g., do_not_compile, CompilationLevel.X).\n"
-            "- Translate conditions clearly using words like when, or, and.\n"
-            "- Do NOT include any reasoning, tags, or metadata.\n"
+            "- Keep important code identifiers exactly as they appear "
+            "(e.g., requires_grad=False, CompilationLevel.NO_COMPILATION).\n"
+            "- If the answer involves multiple items, list them clearly.\n"
+            "- Do NOT include any reasoning, explanations, tags, or "
+            "metadata.\n"
+            "- Do NOT invent information not present in the context.\n"
             "\n"
-            "Style example:\n"
-            "Question: What are the compilation levels that cause "
-            "do_not_compile to be set to True in vLLM's compilation "
-            "decorator?\n"
-            "Answer: The do_not_compile flag is set to True when the "
-            "compilation level is CompilationLevel.NO_COMPILATION or "
-            "CompilationLevel.DYNAMO_AS_IS, or when dynamo is not supported, "
-            "or when the class is ignored for torch compile.\n"
+            "Examples:\n"
+            "Q: What is the requires_grad value set for parameters in the "
+            "process_weights_after_loading method?\n"
+            "A: All parameters (B_24, s, B_meta, and workspace) are set "
+            "with requires_grad=False in the "
+            "process_weights_after_loading method.\n"
+            "\n"
+            "Q: What compilation levels cause do_not_compile to be True?\n"
+            "A: The do_not_compile flag is set to True when the compilation "
+            "level is CompilationLevel.NO_COMPILATION or "
+            "CompilationLevel.DYNAMO_AS_IS, or when dynamo is not supported.\n"
+            "\n"
+            "Q: What is the default value of max_model_len?\n"
+            "A: The default value of max_model_len is None.\n"
             "\n"
             f"Context:\n{context}\n"
             "\n"
@@ -308,35 +389,39 @@ class Generator:
         )
 
     def answer(self, query: str, sources: list[MinimalSource]) -> str:
+        """Generate an answer using retrieved supporting sources."""
         query = query.strip()
 
         if not query:
             raise ValueError("Query cannot be empty.")
         if not sources:
-            return "No supporting sources were found for this question."
+            raise RuntimeError(
+                "No supporting sources were found for this question."
+            )
 
         try:
             self._load_model()
         except Exception as error:
-            return f"Model loading failed: {error}"
+            raise RuntimeError(f"Model loading failed: {error}")
 
         if self._client is None:
-            return "Model initialization failed."
+            raise RuntimeError("Model initialization failed.")
 
         context = self._build_context(query, sources)
         if not context.strip():
-            return "Sources were found but their content could not be read."
+            raise RuntimeError(
+                "Sources were found but their content could not be read."
+            )
 
         prompt = self._build_prompt(query, context)
 
         try:
-            response = self._client.generate(
-                model=self.model_name,
+            response = self._generate(
                 prompt=prompt,
-                stream=False,
                 options={
                     "num_predict": self.max_new_tokens,
-                    "temperature": 0.2,
+                    "temperature": 0.1,
+                    "top_p": 0.9,
                 },
             )
             text = self._clean_response(self._extract_response_text(response))
@@ -346,16 +431,14 @@ class Generator:
                 return text
 
         except Exception as error:
-            return f"Answer generation failed: {error}"
+            raise RuntimeError(f"Answer generation failed: {error}")
 
         try:
-            retry_response = self._client.generate(
-                model=self.model_name,
+            retry_response = self._generate(
                 prompt=prompt,
-                stream=False,
                 options={
                     "num_predict": self.max_new_tokens,
-                    "temperature": 0.4,
+                    "temperature": 0.3,
                     "top_p": 0.95,
                     "repeat_penalty": 1.1,
                 },
@@ -364,14 +447,33 @@ class Generator:
                 self._extract_response_text(retry_response)
             )
             text = self._enforce_answer_style(text)
+
             if self._is_usable_answer(text):
                 return text
 
         except Exception:
             pass
 
-        fallback = self._fallback_from_context(query, context)
-        if self._is_usable_answer(fallback):
-            return fallback
+        try:
+            final_response = self._generate(
+                prompt=prompt,
+                options={
+                    "num_predict": self.max_new_tokens,
+                    "temperature": 0.5,
+                    "top_p": 0.95,
+                    "repeat_penalty": 1.15,
+                },
+            )
+            text = self._clean_response(
+                self._extract_response_text(final_response)
+            )
+            text = self._enforce_answer_style(text)
 
-        return "The model did not produce a usable answer for this question."
+            if self._is_usable_answer(text):
+                return text
+
+        except Exception:
+            pass
+
+        return "The model was unable to generate a \
+satisfactory answer for this question."

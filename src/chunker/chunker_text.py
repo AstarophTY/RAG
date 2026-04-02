@@ -5,6 +5,7 @@ class TextChunker:
         chunk_size: int = 512,
         overlap: int = 100
     ) -> list[tuple[str, int, int]]:
+        """Split text into overlapping paragraph-aware chunks."""
         paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
         final_chunks = []
         search_start = 0
