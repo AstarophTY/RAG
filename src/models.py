@@ -98,7 +98,7 @@ class StudentSearchResults(BaseModel):
     k: int
 
 
-class StudentSearchResultsAndAnswer(StudentSearchResults):
+class StudentSearchResultsAndAnswer(BaseModel):
     """Represents the full search + answer output for a dataset.
 
     Inherits from StudentSearchResults and overrides search_results
@@ -108,4 +108,5 @@ class StudentSearchResultsAndAnswer(StudentSearchResults):
         search_results: list of per-question results with answers.
     """
 
-    search_results: list[MinimalAnswer]  # type: ignore[assignment]
+    search_results: list[MinimalAnswer]
+    k: int
