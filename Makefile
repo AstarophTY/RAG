@@ -7,11 +7,12 @@ MAKEFLAGS += -s
 
 all: run
 
-run:
+run: install
 	$(UV) run python -m $(SRC_DIR)
 
 install:
 	$(UV) sync
+	ollama pull qwen3:0.6b
 
 clean:
 	$(RM) -rf $(TEMP_FILE)
