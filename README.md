@@ -4,6 +4,10 @@
 
 > A Python RAG (Retrieval-Augmented Generation) system that indexes the vLLM codebase and answers questions about it using BM25 retrieval + Ollama (Qwen) generation.
 
+**Results on the public datasets (100 questions each):** recall@5 = **0.74** on documentation questions and
+**0.66** on code questions; indexing of the 1,826 files takes about 10 s and retrieval runs at hundreds of
+questions per second. See [Performance Analysis](#performance-analysis).
+
 ---
 
 ## Table of Contents
@@ -317,26 +321,30 @@ graph TD
 ### Installation
 
 ```bash
-make install
+make install   # uv sync + ollama pull qwen3:0.6b
+make data      # extract the vLLM sources from data/raw/vllm-0.10.1.zip
 ```
 
-### Ollama setup (required for generation)
+### Ollama setup (required for generation only)
 
 ```bash
 ollama serve
-ollama pull qwen2.5:1.5b
 ```
+
+The default model is `qwen3:0.6b`; another one can be passed with `--model_name`.
 
 ### Index
 
 ```bash
-uv run python -m student index --max_chunk_size 2000
+make index
+# or: uv run python -m student index --max_chunk_size 2000
 ```
 
-### Tests
+### Tests and lint
 
 ```bash
-uv run pytest
+make test   # pytest: chunkers and evaluator
+make lint   # flake8 + mypy
 ```
 
 ---
@@ -355,32 +363,37 @@ uv run python -m student search "question" --k 5
 uv run python -m student answer "question" --k 10
 ```
 
-### Evaluate
+### Evaluate on a dataset
 
 ```bash
-uv run python -m student evaluate
+# 1. Retrieve the top 10 sources for every question
+uv run python -m student search_dataset data/datasets/AnsweredQuestions/dataset_docs_public.json --k 10
+
+# 2. Compute recall@1/3/5/10 against the ground truth
+uv run python -m student evaluate \
+  data/output/search_results/dataset_docs_public_k10_search_results.json \
+  data/datasets/AnsweredQuestions/dataset_docs_public.json --k 10
 ```
 
 ---
 
 ## Performance Analysis
 
-```mermaid
-graph TD
-    Perf["Performance"]
+Measured with `search_dataset` + `evaluate` (k = 10) on the public datasets. A retrieved chunk counts as a match
+when it is in the right file and overlaps at least 5% of the ground-truth span.
 
-    Index["Index ≤ 5 min"]
-    Cold["Cold start ≤ 60s"]
-    Warm["Warm ≤ 90s"]
-    Recall["Recall ≥ target"]
-    Answer["Answer ≤ 2s"]
+| Dataset (100 questions) | Recall@1 | Recall@3 | Recall@5 | Recall@10 |
+| --- | ---: | ---: | ---: | ---: |
+| Documentation questions | 0.51 | 0.69 | 0.74 | 0.81 |
+| Code questions | 0.51 | 0.61 | 0.66 | 0.73 |
 
-    Perf --> Index
-    Perf --> Cold
-    Perf --> Warm
-    Perf --> Recall
-    Perf --> Answer
-```
+| Step | Time |
+| --- | --- |
+| Indexing (1,826 files → 28,305 code chunks + 6,162 docs chunks) | ~10 s |
+| Retrieval for 100 questions | < 1 s |
+
+Code questions are harder for BM25: identifiers rarely appear in the natural-language question, which is the
+main lead for improvement (identifier splitting, or a hybrid BM25 + embeddings retriever).
 
 ---
 
@@ -406,7 +419,7 @@ graph TD
 ## Resources
 
 * [https://en.wikipedia.org/wiki/Okapi_BM25](https://en.wikipedia.org/wiki/Okapi_BM25)
-* [https://ollama.com/library/qwen2.5](https://ollama.com/library/qwen2.5)
+* [https://ollama.com/library/qwen3](https://ollama.com/library/qwen3)
 * [https://github.com/ollama/ollama-python](https://github.com/ollama/ollama-python)
 * [https://docs.python.org/3/library/ast.html](https://docs.python.org/3/library/ast.html)
 * [https://en.wikipedia.org/wiki/Retrieval-augmented_generation](https://en.wikipedia.org/wiki/Retrieval-augmented_generation)
