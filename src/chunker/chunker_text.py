@@ -24,7 +24,7 @@ class TextChunker:
                     chunk_content = paragraph[start:end]
 
                     global_start = p_start_idx + start
-                    global_end = p_start_idx + len(chunk_content)
+                    global_end = global_start + len(chunk_content)
 
                     final_chunks.append((
                         chunk_content,

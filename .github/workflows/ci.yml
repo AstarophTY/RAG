@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - name: Lint (flake8 + mypy)
+        run: make lint
+      - name: Tests
+        run: make test
+
+  retrieval-benchmark:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - name: Index the vLLM sources
+        run: make index
+      - name: Recall on the public datasets
+        run: |
+          for name in dataset_docs_public dataset_code_public; do
+            uv run python -m src search_dataset "data/datasets/AnsweredQuestions/$name.json" --k 10
+            uv run python -m src evaluate \
+              "data/output/search_results/${name}_k10_search_results.json" \
+              "data/datasets/AnsweredQuestions/$name.json" --k 10
+          done

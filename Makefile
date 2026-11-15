@@ -14,6 +14,17 @@ install:
 	$(UV) sync
 	ollama pull qwen3:0.6b
 
+.PHONY: data index test
+
+data:
+	test -d data/raw/vllm-0.10.1 || (cd data/raw && unzip -q vllm-0.10.1.zip)
+
+index: data
+	$(UV) run python -m $(SRC_DIR) index
+
+test:
+	$(UV) run pytest $(TEST_DIR)
+
 clean:
 	$(RM) -rf $(TEMP_FILE)
 	find . -type d -name "__pycache__" -exec rm -rf {} +
